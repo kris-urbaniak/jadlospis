@@ -97,19 +97,23 @@ def send_email(subject: str, body: str) -> None:
 
 def send_whatsapp(body: str) -> None:
     """Uses the free CallMeBot API: https://www.callmebot.com/blog/free-api-whatsapp-messages/"""
-    phone = os.environ["WHATSAPP_PHONE"]  # e.g. +48123456789
-    apikey = os.environ["CALLMEBOT_APIKEY"]
+    phone = os.environ["WHATSAPP_PHONE"].strip()  # e.g. +48123456789
+    apikey = os.environ["CALLMEBOT_APIKEY"].strip()
     url = (
         "https://api.callmebot.com/whatsapp.php"
-        f"?phone={quote_plus(phone)}&text={quote_plus(body)}&apikey={apikey}"
+        f"?phone={quote_plus(phone)}&text={quote_plus(body)}&apikey={quote_plus(apikey)}"
     )
     r = requests.get(url, timeout=60)
     r.raise_for_status()
     text = clean(re.sub(r"<[^>]+>", " ", r.text))
+    # CallMeBot echoes the phone + message first, then the status; drop the
+    # echoed message so the actual status/error is visible.
+    status = text.replace(clean(body), "").strip()
     # CallMeBot returns HTTP 200 even on errors, so inspect the body.
-    if "queued" not in text.lower() and "sent" not in text.lower():
-        raise RuntimeError(f"CallMeBot response: {text[:300]}")
-    print(f"WhatsApp: {text[:200]}")
+    low = status.lower()
+    if "queued" not in low and "sent" not in low:
+        raise RuntimeError(f"CallMeBot response: {status[-500:]}")
+    print(f"WhatsApp: {status[-200:]}")
 
 
 def main() -> int:
