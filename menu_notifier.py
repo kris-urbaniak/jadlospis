@@ -79,7 +79,7 @@ def format_message(menu: dict) -> str:
 
 def send_email(subject: str, body: str) -> None:
     host = os.environ["SMTP_HOST"]
-    port = int(os.environ.get("SMTP_PORT", "587"))
+    port = int(os.environ.get("SMTP_PORT") or "587")
     user = os.environ["SMTP_USER"]
     password = os.environ["SMTP_PASSWORD"]
     to = os.environ["EMAIL_TO"]
@@ -145,7 +145,7 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    channels = [c.strip().lower() for c in os.environ.get("CHANNELS", "email").split(",")]
+    channels = [c.strip().lower() for c in (os.environ.get("CHANNELS") or "email").split(",") if c.strip()]
     errors = 0
     for ch in channels:
         try:
