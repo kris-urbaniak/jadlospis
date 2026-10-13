@@ -2,10 +2,8 @@ name: Kindergarten menu
 
 on:
   schedule:
-    # 20:00 Europe/Warsaw = 18:00 UTC (summer) / 19:00 UTC (winter).
-    # Run at both; the script only sends when Warsaw hour == 20.
-    - cron: "0 18 * * 0-4"
-    - cron: "0 19 * * 0-4"
+    - cron: "7 19 * * 0-4"
+      timezone: "Europe/Warsaw"
   workflow_dispatch:
 
 jobs:
