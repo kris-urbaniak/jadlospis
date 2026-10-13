@@ -2,7 +2,7 @@ name: Kindergarten menu
 
 on:
   schedule:
-    - cron: "7 19 * * 0-4"
+    - cron: "7 17 * * 0-4"
       timezone: "Europe/Warsaw"
   workflow_dispatch:
 
@@ -25,9 +25,4 @@ jobs:
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           WHATSAPP_PHONE: ${{ secrets.WHATSAPP_PHONE }}
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            python menu_notifier.py
-          else
-            python menu_notifier.py --only-at-hour 20
-          fi
+        run: python menu_notifier.py
