@@ -6,6 +6,7 @@ import os
 import re
 import smtplib
 import sys
+import time
 from datetime import date, datetime, timedelta
 from email.mime.text import MIMEText
 from urllib.parse import quote_plus
@@ -34,6 +35,23 @@ def load_env(path: str = ".env") -> None:
 
 def clean(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
+
+
+RETRIES = 3          # extra attempts after the first one
+RETRY_DELAY = 60     # seconds between attempts
+
+
+def with_retries(name: str, fn, *args):
+    """Run fn(*args); on failure retry RETRIES times, waiting RETRY_DELAY seconds."""
+    for attempt in range(1, RETRIES + 2):
+        try:
+            return fn(*args)
+        except Exception as e:  # noqa: BLE001
+            if attempt > RETRIES:
+                raise
+            print(f"{name} failed (attempt {attempt}/{RETRIES + 1}): {e}. "
+                  f"Retrying in {RETRY_DELAY}s...", file=sys.stderr)
+            time.sleep(RETRY_DELAY)
 
 
 def fetch_menu(target: date) -> dict | None:
@@ -137,30 +155,55 @@ def main() -> int:
         print(f"{target} is a weekend – nothing to send.")
         return 0
 
-    menu = fetch_menu(target)
-    if not menu:
-        body = f"Brak jadłospisu na {target:%d.%m.%Y} na stronie {URL}"
-        subject = f"Jadłospis {target:%d.%m.%Y} – brak danych"
+    fetch_failed = False
+    try:
+        menu = with_retries("Fetching menu", fetch_menu, target)
+    except Exception as e:  # noqa: BLE001
+        fetch_failed = True
+        print(f"Failed to fetch menu: {e}", file=sys.stderr)
+        body = (f"⚠️ Nie udało się pobrać jadłospisu na {target:%d.%m.%Y} "
+                f"po {RETRIES + 1} próbach.\nBłąd: {e}\n{URL}")
+        subject = f"Jadłospis {target:%d.%m.%Y} – błąd"
     else:
-        body = format_message(menu)
-        subject = f"Jadłospis na jutro – {menu['day']}"
+        if not menu:
+            body = f"Brak jadłospisu na {target:%d.%m.%Y} na stronie {URL}"
+            subject = f"Jadłospis {target:%d.%m.%Y} – brak danych"
+        else:
+            body = format_message(menu)
+            subject = f"Jadłospis na jutro – {menu['day']}"
 
     print(body)
     if args.dry_run:
-        return 0
+        return 1 if fetch_failed else 0
 
     channels = [c.strip().lower() for c in (os.environ.get("CHANNELS") or "email").split(",") if c.strip()]
-    errors = 0
+    senders = {
+        "email": lambda s, b: send_email(s, b),
+        "whatsapp": lambda s, b: send_whatsapp(b),
+    }
+    channels = [ch for ch in channels if ch in senders]
+
+    failed: dict[str, Exception] = {}
     for ch in channels:
         try:
-            if ch == "email":
-                send_email(subject, body)
-            elif ch == "whatsapp":
-                send_whatsapp(body)
+            with_retries(f"Sending via {ch}", senders[ch], subject, body)
         except Exception as e:  # noqa: BLE001
-            errors += 1
+            failed[ch] = e
             print(f"Failed to send via {ch}: {e}", file=sys.stderr)
-    return 1 if errors else 0
+
+    # Report channel failures through the channels that still work.
+    working = [ch for ch in channels if ch not in failed]
+    if failed and working:
+        err_body = "⚠️ Błąd wysyłki jadłospisu:\n" + "\n".join(
+            f"- {ch}: {str(e)[:300]}" for ch, e in failed.items())
+        err_subject = f"Jadłospis {target:%d.%m.%Y} – błąd wysyłki"
+        for ch in working:
+            try:
+                senders[ch](err_subject, err_body)
+            except Exception as e:  # noqa: BLE001
+                print(f"Failed to report error via {ch}: {e}", file=sys.stderr)
+
+    return 1 if (failed or fetch_failed) else 0
 
 
 if __name__ == "__main__":
