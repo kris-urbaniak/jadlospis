@@ -1,9 +1,9 @@
 name: Kindergarten menu
 
 on:
-  schedule:
-    - cron: "7 15 * * 0-4"
-      timezone: "Europe/Warsaw"
+  # schedule:
+  #   - cron: "7 15 * * 0-4"
+  #     timezone: "Europe/Warsaw"
   workflow_dispatch:
 
 jobs:
